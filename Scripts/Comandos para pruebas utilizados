@@ -1,0 +1,325 @@
+============================================================================
+ INFRAESTRUCTURA 1 - COMANDOS PARA LAS PRUEBAS UTILIZADOS EN EL LABORATORIO
+============================================================================
+
+Estudiante: Merolyn Mejía
+Matrícula: 2025-0827
+Asignatura: Seguridad de Redes
+Práctica: Infraestructura 1
+
+NOTA:
+Este archivo contiene los principales comandos utilizados durante
+las pruebas del laboratorio. La configuración
+del FortiGate fue realizada mediante su interfaz gráfica (GUI),
+por lo que no se utilizaron comandos CLI para configurar el firewall.
+
+
+============================================================
+1. SERVIDORES WEB - APACHE
+============================================================
+
+# Actualizar los repositorios de Ubuntu.
+sudo apt update
+
+# Instalar el servidor web Apache.
+sudo apt install apache2 -y
+
+# Iniciar Apache.
+sudo systemctl start apache2
+
+# Habilitar Apache para iniciar automáticamente con el sistema.
+sudo systemctl enable apache2
+
+# Comprobar el estado del servicio Apache.
+sudo systemctl status apache2
+
+
+PROPÓSITO:
+Estos comandos fueron utilizados para instalar, iniciar y verificar
+Apache en los servidores Web del Sistema de Caja y del Sistema de
+Inventario ubicados dentro de la DMZ.
+
+
+============================================================
+2. VERIFICACIÓN DE DIRECCIONAMIENTO DE LOS SERVIDORES
+============================================================
+
+# Mostrar las interfaces y direcciones IP del servidor.
+ip addr
+
+
+PROPÓSITO:
+Este comando permitió comprobar que los servidores tenían
+configuradas correctamente sus direcciones IP dentro de la DMZ.
+
+Direcciones utilizadas:
+
+Sistema de Caja:
+172.8.27.2/28
+
+Sistema de Inventario:
+172.8.27.3/28
+
+Database Server:
+172.8.27.4/28
+
+
+============================================================
+3. SERVIDOR DE BASE DE DATOS - MYSQL
+============================================================
+
+# Actualizar los repositorios.
+sudo apt update
+
+# Instalar MySQL Server.
+sudo apt install mysql-server -y
+
+# Iniciar MySQL.
+sudo systemctl start mysql
+
+# Habilitar MySQL para iniciar automáticamente.
+sudo systemctl enable mysql
+
+# Verificar el estado del servicio.
+sudo systemctl status mysql
+
+# Acceder a MySQL como administrador local.
+sudo mysql
+
+
+PROPÓSITO:
+Estos comandos fueron utilizados para instalar y comprobar el
+funcionamiento de MySQL en el servidor de base de datos
+172.8.27.4.
+
+
+============================================================
+4. BASE DE DATOS DEL LABORATORIO
+============================================================
+
+# Crear la base de datos utilizada por los servidores web.
+
+CREATE DATABASE sistema_empresa;
+
+# Seleccionar la base de datos.
+
+USE sistema_empresa;
+
+
+PROPÓSITO:
+La base de datos sistema_empresa fue creada para comprobar la
+comunicación entre los servidores web y el Database Server.
+
+NOTA DE SEGURIDAD:
+Las credenciales utilizadas durante el laboratorio no se incluyen
+en este archivo para evitar publicar contraseñas en el repositorio.
+
+
+============================================================
+5. PRUEBA DE SSH DESDE VLAN 20
+============================================================
+
+ssh ubuntu@172.8.27.4
+
+
+PROPÓSITO:
+Este comando fue utilizado desde el equipo Windows perteneciente
+a VLAN 20 para comprobar que esta VLAN tenía permitido establecer
+conexiones SSH hacia los servidores de la DMZ.
+
+RESULTADO ESPERADO:
+Conexión permitida por la política VLAN20-SSH-DMZ.
+
+
+============================================================
+6. PRUEBA DE BLOQUEO SSH DESDE VLAN 10
+============================================================
+
+ssh ubuntu@172.8.27.4
+
+
+PROPÓSITO:
+Este comando fue utilizado desde el cliente Alpine perteneciente
+a VLAN 10 para intentar acceder mediante SSH al servidor de base
+de datos.
+
+RESULTADO ESPERADO:
+La conexión debe ser bloqueada por FortiGate mediante la política
+BLOQUEO-VLAN10-SSH.
+
+El intento debe aparecer en los registros del FortiGate como:
+
+Deny: policy violation
+
+
+============================================================
+7. PRUEBA DE BLOQUEO DEL SISTEMA DE INVENTARIO
+============================================================
+
+wget -S -O- http://172.8.27.3
+
+
+PROPÓSITO:
+Este comando fue ejecutado desde el cliente Alpine de VLAN 10 para
+intentar acceder al servidor web del Sistema de Inventario.
+
+RESULTADO ESPERADO:
+FortiGate debe bloquear la conexión mediante la política:
+
+BLOQUEO-VLAN10-INVENTARIO
+
+El evento debe aparecer en los registros como una violación de
+política.
+
+
+============================================================
+8. PRUEBA DE BLOQUEO DMZ HACIA VLAN 10
+============================================================
+
+ping -c 4 10.8.27.3
+
+
+PROPÓSITO:
+Este comando fue ejecutado desde el servidor de Caja ubicado en la
+DMZ para comprobar que los servidores no podían iniciar conexiones
+hacia los usuarios de VLAN 10.
+
+RESULTADO ESPERADO:
+100% packet loss.
+
+El tráfico debe ser bloqueado mediante:
+
+BLOQUEO-DMZ-VLAN10
+
+
+============================================================
+9. PRUEBA DE BLOQUEO DMZ HACIA VLAN 20
+============================================================
+
+ping -c 4 10.8.27.130
+
+
+PROPÓSITO:
+Este comando fue ejecutado desde el servidor de Caja para comprobar
+que los servidores de la DMZ tampoco podían iniciar conexiones hacia
+los usuarios pertenecientes a VLAN 20.
+
+RESULTADO ESPERADO:
+100% packet loss.
+
+El tráfico debe ser bloqueado mediante:
+
+BLOQUEO-DMZ-VLAN20
+
+
+============================================================
+10. PRUEBA DE ACTUALIZACIONES DESDE LA DMZ
+============================================================
+
+sudo apt update
+
+
+PROPÓSITO:
+Este comando permitió comprobar que los servidores de la DMZ podían
+comunicarse con los repositorios autorizados de Ubuntu para realizar
+actualizaciones.
+
+Los destinos autorizados fueron:
+
+archive.ubuntu.com
+security.ubuntu.com
+
+RESULTADO ESPERADO:
+Los repositorios deben actualizarse correctamente mediante las
+políticas específicas del FortiGate, sin proporcionar acceso general
+a Internet a la DMZ.
+
+
+============================================================
+11. DHCP EN CLIENTE ALPINE - VLAN 10
+============================================================
+
+udhcpc -i eth0
+
+
+PROPÓSITO:
+Este comando fue utilizado en el cliente Alpine para solicitar una
+dirección IP mediante DHCP.
+
+El cliente recibió una dirección perteneciente a:
+
+10.8.27.0/25
+
+Durante las pruebas se utilizó:
+
+10.8.27.3/25
+
+Gateway:
+
+10.8.27.1
+
+
+============================================================
+12. VERIFICACIÓN DE VLAN DEL SWITCH
+============================================================
+
+show vlan brief
+
+
+PROPÓSITO:
+Este comando permitió comprobar la existencia de VLAN 10 y VLAN 20
+y verificar los puertos asociados a cada VLAN.
+
+
+============================================================
+13. VERIFICACIÓN DEL TRUNK
+============================================================
+
+show interfaces trunk
+
+
+PROPÓSITO:
+Este comando permitió comprobar que el enlace entre el switch y
+FortiGate estaba funcionando como trunk y transportando las VLAN
+10 y 20.
+
+
+============================================================
+14. VERIFICACIÓN DE PORT SECURITY
+============================================================
+
+show port-security interface GigabitEthernet0/1
+
+show port-security interface GigabitEthernet0/2
+
+
+PROPÓSITO:
+Estos comandos permitieron comprobar que Port Security estaba
+habilitado en los puertos de VLAN 10 y VLAN 20.
+
+Durante las pruebas se verificaron los estados:
+
+Port Security: Enabled
+Port Status: Secure-up
+Violation Mode: Restrict
+
+También se comprobó el aprendizaje de direcciones MAC mediante
+Sticky MAC.
+
+
+============================================================
+15. VERIFICACIÓN DE INTERFACES DEL SWITCH
+============================================================
+
+show interfaces status
+
+
+PROPÓSITO:
+Este comando permitió comprobar el estado de los puertos del switch,
+identificar los puertos utilizados por VLAN 10 y VLAN 20 y verificar
+que los puertos no utilizados permanecieran deshabilitados.
+
+
+
+
+
