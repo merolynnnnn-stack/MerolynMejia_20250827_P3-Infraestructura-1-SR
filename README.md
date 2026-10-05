@@ -10,10 +10,40 @@
 ## 🎥 Video demostrativo
 
 ▶️ **Video de demostración:**  
-[https://youtu.be/D94mXhJJL-g]
+https://youtu.be/D94mXhJJL-g
 
 > En el video demuestro el funcionamiento de los principales controles de seguridad implementados en la infraestructura, incluyendo segmentación mediante VLAN, DMZ, control de acceso SSH, restricciones entre redes y registros de violaciones de políticas.
 
+---
+# 📑 Índice
+
+1. [Descripción del laboratorio](#1-descripción-del-laboratorio)
+2. [Propósito del laboratorio](#2-propósito-del-laboratorio)
+3. [Topología](#3-topología)
+4. [Plan de direccionamiento IP](#4-plan-de-direccionamiento-ip)
+5. [Configuración del FortiGate](#5-configuración-del-fortigate)
+6. [DHCP](#6-dhcp)
+7. [Configuración de la DMZ](#7-configuración-de-la-dmz)
+8. [Servidores web](#8-servidores-web)
+9. [Servidor de base de datos](#9-servidor-de-base-de-datos)
+10. [Objetos de direcciones del FortiGate](#10-objetos-de-direcciones-del-fortigate)
+11. [Políticas de seguridad](#11-políticas-de-seguridad)
+12. [Bloqueo de SSH desde VLAN 10](#12-bloqueo-de-ssh-desde-vlan-10)
+13. [Bloqueo del Sistema de Inventario para VLAN 10](#13-bloqueo-del-sistema-de-inventario-para-vlan-10)
+14. [Protección de las redes internas](#14-protección-de-las-redes-internas)
+15. [Restricción de Internet para la DMZ](#15-restricción-de-internet-para-la-dmz)
+16. [Configuración de VLAN en el switch](#16-configuración-de-vlan-en-el-switch)
+17. [Puerto de VLAN 10](#17-puerto-de-vlan-10)
+18. [Puerto de VLAN 20](#18-puerto-de-vlan-20)
+19. [Port Security](#19-port-security)
+20. [PortFast y BPDU Guard](#20-portfast-y-bpdu-guard)
+21. [Puertos no utilizados](#21-puertos-no-utilizados)
+22. [Administración segura del switch](#22-administración-segura-del-switch)
+23. [Verificaciones realizadas](#23-verificaciones-realizadas)
+24. [Evidencias](#24-evidencias)
+25. [Conclusión](#25-conclusión)
+
+---
 ---
 
 # 1. Descripción del laboratorio
@@ -54,20 +84,8 @@ El propósito de este laboratorio es aplicar de manera práctica conceptos de se
 
 # 3. Topología
 
-La infraestructura utilizada fue la siguiente:
-
-                    INTERNET / NAT
-                          |
-                      FortiGate
-                 port1 | port2 | port3
-                   WAN | TRUNK | DMZ
-                       |       |
-                 Cisco IOSvL2  Switch
-                   /      \      |
-              VLAN 10   VLAN 20  |
-              Alpine    Windows  |
-                                / | \
-                            Caja Inventario DB
+## Diagrama
+![La infraestructura utilizada fue la siguiente:](Imagenes/image1.png)
 
 ### Equipos utilizados
 
@@ -106,121 +124,53 @@ El direccionamiento fue realizado tomando como referencia la matrícula **2025-0
 
 # 5. Configuración del FortiGate
 
-Toda la configuración correspondiente al FortiGate fue realizada mediante su **interfaz gráfica (GUI)**.
+T# 5. Configuración del FortiGate
 
-Se utilizaron tres interfaces principales:
+Toda la configuración del FortiGate se realizó mediante su **interfaz gráfica (GUI)**, ya que este equipo funciona como el principal dispositivo de seguridad de la infraestructura. Su función es comunicar las diferentes redes y, al mismo tiempo, controlar mediante políticas qué tipo de tráfico puede pasar entre los usuarios, los servidores de la DMZ e Internet.
 
-### port1 – WAN
+Para la conexión hacia Internet se utilizó la interfaz **port1**, configurada como WAN y conectada al NAT de GNS3. Esta interfaz obtuvo su dirección IP automáticamente mediante DHCP y permitió establecer la comunicación externa necesaria para el laboratorio.
 
-Esta interfaz proporciona la salida hacia Internet utilizando el NAT de GNS3.
+La interfaz **port2** se utilizó como enlace trunk entre el FortiGate y el switch Cisco. Sobre esta interfaz se crearon las dos redes virtuales destinadas a los usuarios. La primera fue **VLAN10-USUARIOS**, identificada con el VLAN ID 10 y con la dirección de gateway `10.8.27.1/25`. La segunda fue **VLAN20-USUARIOS**, con VLAN ID 20 y la dirección de gateway `10.8.27.129/25`. De esta manera, los usuarios quedaron separados en dos redes diferentes y fue posible aplicar permisos distintos para cada una.
 
-La dirección fue obtenida mediante DHCP.
+Por otra parte, la interfaz **port3** se destinó exclusivamente a la red de servidores y se identificó como **DMZ-SERVIDORES**. Esta interfaz utiliza la dirección `172.8.27.1/28`, que funciona como puerta de enlace para los tres servidores de la DMZ. A diferencia de los equipos de usuarios, los servidores fueron configurados con direcciones IP estáticas para mantener siempre el mismo direccionamiento y facilitar la creación de las políticas de seguridad.
 
-### port2 – Trunk
+Esta configuración permitió mantener separadas las redes de usuarios y servidores, dejando al FortiGate como punto de control para las comunicaciones entre ellas.
 
-Esta interfaz conecta el FortiGate con el switch Cisco.
-
-Sobre esta interfaz se configuraron las VLAN:
-
-**VLAN 10**
-
-- Nombre: `VLAN10-USUARIOS`
-- VLAN ID: 10
-- Dirección: `10.8.27.1/25`
-
-**VLAN 20**
-
-- Nombre: `VLAN20-USUARIOS`
-- VLAN ID: 20
-- Dirección: `10.8.27.129/25`
-
-### port3 – DMZ
-
-La interfaz port3 fue utilizada para la red de servidores.
-
-- Alias: `DMZ-SERVIDORES`
-- Dirección: `172.8.27.1/28`
-
-Los servidores utilizan direcciones IP estáticas.
+![Interfaces configuradas en FortiGate](Imagenes/image2.png) 
 
 ---
 
 # 6. DHCP
 
-Se configuró DHCP para las dos VLAN de usuarios.
+Para facilitar la asignación de direcciones IP a los equipos de usuarios, se configuró el servicio **DHCP desde la interfaz gráfica del FortiGate** para las VLAN 10 y VLAN 20. De esta manera, los dispositivos conectados a estas redes pueden recibir automáticamente una dirección IP, puerta de enlace y servidores DNS, sin necesidad de configurar estos datos manualmente en cada equipo.
 
-### VLAN 10
+Para la **VLAN 10**, se estableció como puerta de enlace la dirección `10.8.27.1` y se configuró un rango DHCP desde `10.8.27.2` hasta `10.8.27.126`. Este rango pertenece a la red `10.8.27.0/25` y permite entregar automáticamente el direccionamiento a los usuarios conectados a esta VLAN.
 
-Gateway:
+![Configuración DHCP de VLAN 10](Imagenes/image3.png)
 
-    10.8.27.1
+En la **VLAN 20**, se utilizó como puerta de enlace la dirección `10.8.27.129` y se estableció el rango DHCP desde `10.8.27.130` hasta `10.8.27.254`. Esta configuración corresponde a la red `10.8.27.128/25` y permite mantener a estos usuarios separados de los dispositivos pertenecientes a VLAN 10.
 
-Rango:
+![Configuración DHCP de VLAN 20](Imagenes/image4.png)
 
-    10.8.27.2 - 10.8.27.126
-
-### VLAN 20
-
-Gateway:
-
-    10.8.27.129
-
-Rango:
-
-    10.8.27.130 - 10.8.27.254
-
-Como servidores DNS se utilizaron:
-
-    8.8.8.8
-    1.1.1.1
-
-Las pruebas confirmaron que los clientes recibieron correctamente sus configuraciones mediante DHCP.
+Para la resolución de nombres se configuraron los servidores DNS `8.8.8.8` y `1.1.1.1`. Finalmente, se realizaron pruebas desde los equipos de usuarios y se comprobó que podían obtener correctamente su configuración de red mediante DHCP. Con esto se confirmó tanto el funcionamiento del servicio como la correcta separación del direccionamiento entre las dos VLAN.
 
 ---
 
 # 7. Configuración de la DMZ
 
-Los tres servidores fueron colocados dentro de una red DMZ independiente:
+Para aumentar la seguridad de la infraestructura, los tres servidores fueron ubicados dentro de una **DMZ (Zona Desmilitarizada)** independiente de las redes de usuarios. Para esta zona se utilizó la red `172.8.27.0/28`, mientras que la dirección `172.8.27.1` fue configurada en el FortiGate como puerta de enlace de los servidores.
 
-    172.8.27.0/28
+Dentro de la DMZ se configuraron tres servidores con direcciones IP estáticas. El **Web Server del Sistema de Caja** utiliza la dirección `172.8.27.2` y tiene instalado Apache como servicio web. El **Web Server del Sistema de Inventario** utiliza la dirección `172.8.27.3` y también funciona mediante Apache. Finalmente, el **Database Server** fue configurado con la dirección `172.8.27.4` y utiliza MySQL como servicio de base de datos.
 
-La puerta de enlace de los servidores es:
+![Web Server Sistema de Caja](Imagenes/image5.png)
 
-    172.8.27.1
+![Web Server Sistema de Inventario](Imagenes/image6.png)
 
-Los servidores configurados fueron:
+![Database Server](Imagenes/image7.png)
 
-### Web Server – Sistema de Caja
+La creación de esta DMZ permite mantener los servidores separados de las VLAN de usuarios y utilizar el FortiGate como punto de control entre las diferentes redes. De esta manera, la comunicación hacia o desde los servidores depende de las políticas de seguridad configuradas y no existe una comunicación libre entre la DMZ y las redes internas.
 
-IP:
-
-    172.8.27.2
-
-Servicio principal:
-
-    Apache
-
-### Web Server – Sistema de Inventario
-
-IP:
-
-    172.8.27.3
-
-Servicio principal:
-
-    Apache
-
-### Database Server
-
-IP:
-
-    172.8.27.4
-
-Servicio principal:
-
-    MySQL
-
-Esta separación permite mantener los servidores fuera de las redes internas de usuarios y controlar su comunicación mediante el FortiGate.
+Además, mantener direcciones IP estáticas en los servidores facilita la creación de las políticas del firewall, ya que cada servidor conserva siempre la misma dirección y puede ser identificado de forma específica dentro de las reglas de seguridad.
 
 ---
 
@@ -289,308 +239,55 @@ Esto permite utilizar nombres descriptivos dentro de las políticas en lugar de 
 
 # 11. Políticas de seguridad
 
-Se crearon diferentes políticas en FortiGate para controlar el tráfico entre las redes.
-
-## VLAN 20 → SSH → DMZ
-
-Política:
-
-    VLAN20-SSH-DMZ
-
-Esta política permite que únicamente los usuarios pertenecientes a la VLAN 20 puedan utilizar SSH hacia los servidores de la DMZ.
-
-Origen:
-
-    VLAN20-USUARIOS
-
-Destino:
-
-    WEB-CAJA
-    WEB-INVENTARIO
-    DB-SERVER
-
-Servicio:
-
-    SSH
-
-Acción:
-
-    ACCEPT
-
-La prueba realizada desde Windows confirmó que la conexión SSH hacia el servidor de base de datos era permitida.
+Para controlar el tráfico entre las diferentes redes, se crearon varias políticas de seguridad en el FortiGate. Una de ellas fue **`VLAN20-SSH-DMZ`**, diseñada para que únicamente los usuarios de la **VLAN 20** puedan conectarse mediante **SSH** a los servidores de la DMZ, incluyendo el Sistema de Caja, el Sistema de Inventario y el servidor de base de datos. Para comprobar su funcionamiento, se realizó una conexión SSH desde el equipo Windows de la VLAN 20 hacia el servidor de base de datos y el acceso fue permitido correctamente, confirmando que la política funcionaba según lo establecido.
 
 ---
 
 # 12. Bloqueo de SSH desde VLAN 10
 
-Política:
-
-    BLOQUEO-VLAN10-SSH
-
-La VLAN 10 no está autorizada para administrar los servidores mediante SSH.
-
-Origen:
-
-    VLAN10-USUARIOS
-
-Destino:
-
-    Servidores DMZ
-
-Servicio:
-
-    SSH
-
-Acción:
-
-    DENY
-
-Desde el cliente Alpine se realizó una prueba intentando establecer una conexión SSH hacia:
-
-    172.8.27.4
-
-La conexión fue bloqueada.
-
-En los registros del FortiGate se observó:
-
-    Deny: policy violation
-
-Esto confirmó que la política estaba funcionando correctamente.
+Para impedir que los usuarios de la **VLAN 10** administren los servidores de la DMZ mediante SSH, se creó la política **`BLOQUEO-VLAN10-SSH`**, configurada para denegar este tipo de tráfico. Para comprobar su funcionamiento, desde el cliente Alpine de la VLAN 10 se intentó realizar una conexión SSH hacia el servidor `172.8.27.4`, pero el acceso fue bloqueado. Al revisar los registros del FortiGate se observó el mensaje **`Deny: policy violation`**, confirmando que la política estaba funcionando correctamente y que la VLAN 10 no tenía permitido el acceso SSH a los servidores.
 
 ---
 
 # 13. Bloqueo del Sistema de Inventario para VLAN 10
 
-Se creó la política:
-
-    BLOQUEO-VLAN10-INVENTARIO
-
-Esta política evita que los usuarios pertenecientes a VLAN 10 puedan acceder al servidor web del Sistema de Inventario.
-
-Origen:
-
-    VLAN10-USUARIOS
-
-Destino:
-
-    WEB-INVENTARIO
-
-Servicio:
-
-    HTTP
-
-Acción:
-
-    DENY
-
-Desde Alpine se realizó la prueba:
-
-    wget -S -O- http://172.8.27.3
-
-El acceso fue bloqueado.
-
-El FortiGate registró nuevamente el evento como:
-
-    Deny: policy violation
-
-De esta forma se pudo comprobar visualmente la violación de la política solicitada en la práctica.
+Para restringir el acceso de los usuarios de la **VLAN 10** al Sistema de Inventario, se creó la política **`BLOQUEO-VLAN10-INVENTARIO`**, configurada para denegar el tráfico HTTP desde esta VLAN hacia el servidor **`WEB-INVENTARIO`**. Para comprobar su funcionamiento, desde el cliente Alpine se intentó acceder al servidor `172.8.27.3` mediante el comando `wget -S -O- http://172.8.27.3`, pero la conexión fue bloqueada. Al revisar los registros del FortiGate, el intento apareció como **`Deny: policy violation`**, demostrando que la restricción funcionaba correctamente y que los usuarios de VLAN 10 no podían acceder al Sistema de Inventario.
 
 ---
 
 # 14. Protección de las redes internas
 
-Los servidores ubicados en la DMZ no deben poder iniciar conexiones libremente hacia las redes internas.
-
-Para esto se implementaron dos políticas.
-
-### DMZ → VLAN 10
-
-Política:
-
-    BLOQUEO-DMZ-VLAN10
-
-Origen:
-
-    DMZ-SERVIDORES
-
-Destino:
-
-    VLAN10-USUARIOS
-
-Servicio:
-
-    ALL
-
-Acción:
-
-    DENY
-
-La prueba se realizó desde el servidor de Caja:
-
-    ping -c 4 10.8.27.3
-
-Resultado:
-
-    100% packet loss
-
-El FortiGate registró el intento como tráfico denegado.
-
-### DMZ → VLAN 20
-
-Política:
-
-    BLOQUEO-DMZ-VLAN20
-
-Origen:
-
-    DMZ-SERVIDORES
-
-Destino:
-
-    VLAN20-USUARIOS
-
-Servicio:
-
-    ALL
-
-Acción:
-
-    DENY
-
-La prueba utilizada fue:
-
-    ping -c 4 10.8.27.130
-
-Resultado:
-
-    100% packet loss
-
-El intento también quedó registrado como una violación de política.
+Para evitar que los servidores ubicados en la **DMZ** puedan iniciar conexiones libremente hacia las redes internas, se crearon las políticas **`BLOQUEO-DMZ-VLAN10`** y **`BLOQUEO-DMZ-VLAN20`**, ambas configuradas para denegar el tráfico desde la DMZ hacia las VLAN de usuarios. Para comprobar estas restricciones, desde el servidor de Caja se realizaron pruebas de conectividad hacia el cliente de VLAN 10 (`10.8.27.3`) y el cliente de VLAN 20 (`10.8.27.130`), obteniendo en ambos casos un **100% de pérdida de paquetes**. Además, los intentos quedaron registrados en el FortiGate como tráfico denegado, confirmando que los servidores de la DMZ no pueden iniciar comunicaciones hacia las redes internas.
 
 ---
 
 # 15. Restricción de Internet para la DMZ
 
-Los servidores de la DMZ no poseen acceso abierto hacia Internet.
-
-Solamente se permitió el tráfico necesario para servicios específicos.
-
-Se configuró acceso DNS hacia:
-
-    8.8.8.8
-    1.1.1.1
-
-También se permitió comunicación con los repositorios utilizados para las actualizaciones de Ubuntu:
-
-    archive.ubuntu.com
-    security.ubuntu.com
-
-La política utilizada fue:
-
-    DMZ-UBUNTU-UPDATES
-
-Servicios permitidos:
-
-    HTTP
-    HTTPS
-
-Se realizó:
-
-    sudo apt update
-
-La actualización de los repositorios funcionó correctamente.
-
-Esto demuestra que los servidores pueden realizar las comunicaciones necesarias para sus actualizaciones sin tener una política general de acceso libre hacia Internet.
+Para evitar que los servidores de la **DMZ** tengan acceso abierto a Internet, se configuraron políticas que permiten únicamente las comunicaciones necesarias para su funcionamiento y actualización. Se autorizó el acceso a los servidores DNS `8.8.8.8` y `1.1.1.1`, así como a los repositorios `archive.ubuntu.com` y `security.ubuntu.com` mediante la política **`DMZ-UBUNTU-UPDATES`**, permitiendo solamente los servicios HTTP y HTTPS. Para comprobar la configuración se ejecutó `sudo apt update` desde uno de los servidores y la actualización se realizó correctamente, demostrando que la DMZ puede acceder a los servicios necesarios sin contar con una política general de acceso libre a Internet.
 
 ---
 
 # 16. Configuración de VLAN en el switch
 
-En el Cisco IOSvL2 se configuraron:
-
-    VLAN 10
-    VLAN 20
-
-El puerto:
-
-    GigabitEthernet0/0
-
-fue configurado como trunk y solamente permite las VLAN:
-
-    10,20
-
-Configuración principal:
-
-    interface GigabitEthernet0/0
-     switchport trunk allowed vlan 10,20
-     switchport trunk encapsulation dot1q
-     switchport mode trunk
+En el switch **Cisco IOSvL2** se configuraron las **VLAN 10 y VLAN 20** para mantener separados los dos grupos de usuarios dentro de la infraestructura. El puerto `GigabitEthernet0/0`, encargado de conectar el switch con el FortiGate, fue configurado en modo **trunk** utilizando encapsulación 802.1Q y permitiendo únicamente el tráfico correspondiente a las VLAN 10 y 20. De esta manera, ambas VLAN pueden utilizar el mismo enlace físico hacia el FortiGate sin perder su separación lógica, permitiendo que posteriormente las políticas de seguridad se apliquen de forma independiente a cada red.
 
 ---
 
 # 17. Puerto de VLAN 10
 
-El puerto:
-
-    GigabitEthernet0/1
-
-fue configurado como puerto de acceso para VLAN 10.
-
-Configuración:
-
-    interface GigabitEthernet0/1
-     description USUARIO-VLAN10
-     switchport access vlan 10
-     switchport mode access
-     switchport port-security violation restrict
-     switchport port-security mac-address sticky
-     switchport port-security
-     spanning-tree portfast edge
-     spanning-tree bpduguard enable
+El puerto **`GigabitEthernet0/1`** del switch fue configurado en modo **access** y asignado a la **VLAN 10**, ya que en este puerto se encuentra conectado el equipo correspondiente a los usuarios de esta red. Además, se aplicaron medidas de seguridad como **Port Security con aprendizaje Sticky**, utilizando el modo de violación `restrict` para limitar la conexión de dispositivos no autorizados. También se habilitaron **PortFast** y **BPDU Guard**, con el objetivo de permitir una conexión rápida del dispositivo final y proteger el puerto ante posibles BPDUs recibidas de manera no esperada. Con estas configuraciones se mejora la seguridad del puerto y se mantiene al usuario correctamente dentro de la VLAN 10.
 
 ---
 
 # 18. Puerto de VLAN 20
 
-El puerto:
-
-    GigabitEthernet0/2
-
-fue configurado como puerto de acceso para VLAN 20.
-
-Configuración:
-
-    interface GigabitEthernet0/2
-     description USUARIO-VLAN20
-     switchport access vlan 20
-     switchport mode access
-     switchport port-security violation restrict
-     switchport port-security mac-address sticky
-     switchport port-security
-     spanning-tree portfast edge
-     spanning-tree bpduguard enable
+El puerto **`GigabitEthernet0/2`** del switch fue configurado en modo **access** y asignado a la **VLAN 20**, permitiendo conectar el equipo correspondiente a los usuarios de esta red. Para aumentar la seguridad del puerto, se habilitó **Port Security con aprendizaje Sticky** y se estableció el modo de violación `restrict`, ayudando a limitar la conexión de dispositivos no autorizados. También se configuraron **PortFast** y **BPDU Guard** para agilizar la conexión del dispositivo final y proteger el puerto ante la recepción de BPDUs no esperadas. Esta configuración mantiene al usuario correctamente dentro de la VLAN 20 y agrega medidas básicas de protección al puerto del switch.
 
 ---
 
 # 19. Port Security
 
-Se implementó Port Security en los puertos de usuarios.
-
-Se utilizó:
-
-    switchport port-security
-    switchport port-security mac-address sticky
-    switchport port-security violation restrict
-
-De esta forma, el switch aprende la dirección MAC conectada al puerto y limita la conexión de dispositivos no autorizados.
-
-En las verificaciones realizadas, Port Security se mostró:
-
-    Enabled
-    Secure-up
-    Restrict
-
-También se confirmó que cada puerto tenía una dirección MAC sticky aprendida.
+Para aumentar la seguridad de los puertos utilizados por los usuarios, se implementó **Port Security** tanto en la VLAN 10 como en la VLAN 20. Esta configuración permite que el switch aprenda automáticamente la dirección MAC del dispositivo conectado mediante la función **Sticky** y limite la conexión de equipos no autorizados utilizando el modo de violación `restrict`. Durante las verificaciones, Port Security apareció como **Enabled**, el estado del puerto como **Secure-up** y el modo de violación como **Restrict**. También se confirmó que cada puerto tenía una dirección MAC Sticky aprendida, demostrando que la medida de seguridad quedó activa y funcionando correctamente.
 
 ---
 
@@ -625,28 +322,7 @@ Esto reduce la posibilidad de que un dispositivo sea conectado a un puerto que n
 
 # 22. Administración segura del switch
 
-También se configuraron medidas básicas para proteger la administración del switch.
-
-Se agregó un banner de acceso restringido:
-
-    ACCESO RESTRINGIDO - SOLO PERSONAL AUTORIZADO
-
-Se configuró autenticación local para las líneas VTY y solamente se permitió SSH:
-
-    line vty 0 4
-     login local
-     transport input ssh
-
-También se configuró:
-
-    ip domain-name infra1.local
-    ip ssh version 2
-
-y se generaron claves RSA de 2048 bits.
-
-De esta manera, la administración remota del switch utiliza SSH en lugar de protocolos de administración sin cifrado como Telnet.
-
-> Por seguridad, las contraseñas y credenciales utilizadas en el laboratorio no se publican en este repositorio.
+Para proteger la administración del switch se aplicaron varias medidas básicas de seguridad. Se configuró un **banner de acceso restringido** para indicar que solamente el personal autorizado puede ingresar al dispositivo y se habilitó la autenticación local en las líneas VTY. Además, se permitió únicamente el acceso remoto mediante **SSH**, evitando el uso de protocolos sin cifrado como Telnet. Para habilitar este servicio se configuró el dominio `infra1.local`, se utilizó **SSH versión 2** y se generaron claves **RSA de 2048 bits**. De esta manera, la administración remota del switch queda protegida mediante una conexión cifrada y autenticada. Por seguridad, las contraseñas y credenciales utilizadas durante el laboratorio no se publican en este repositorio.
 
 ---
 
@@ -697,44 +373,132 @@ Se incluyen capturas de:
 13. Port Security.
 14. Estado de las VLAN del switch.
 
----
+## 24.1 Topología completa
 
-# 25. Estructura del repositorio
+La siguiente imagen muestra la topología utilizada en GNS3, incluyendo el FortiGate, el switch Cisco, las VLAN de usuarios y los servidores ubicados en la DMZ.
 
-    Infraestructura-1-Seguridad-de-Redes/
-    │
-    ├── README.md
-    │
-    ├── Evidencias/
-    │   ├── 01_Topologia_Completa.png
-    │   ├── 02_Interfaces_FortiGate.png
-    │   ├── 03_DHCP_VLAN10.png
-    │   ├── 04_DHCP_VLAN20.png
-    │   ├── 05_Server_Caja_Activo.png
-    │   ├── 06_Server_Inventario.png
-    │   ├── 07_DB_Server_Activo.png
-    │   ├── 08_Politicas_FortiGate.png
-    │   ├── 09_VLAN20_SSH_Permitido.png
-    │   ├── 10_Logs_Politicas_Seguridad.png
-    │   ├── 11_DMZ_Actualizaciones.png
-    │   ├── 12_Switch_VLANs_Trunk.png
-    │   ├── 13_Switch_PortSecurity.png
-    │   └── 14_Switch_VLANs.png
-    │
-    ├── Diagramas/
-    │   └── Diagrama_Infraestructura1.png
-    │
-    ├── Running-Configs/
-    │   └── Switch_Running-Config.txt
-    │
-    ├── Scripts/
-    │
-    └── Documentacion/
-        └── Documentacion_Infraestructura1.pdf
+![Topología completa](Imagenes/image1.png)
 
 ---
 
-# 26. Conclusión
+## 24.2 Interfaces del FortiGate
+
+Configuración de las interfaces utilizadas para la WAN, las VLAN y la red DMZ.
+
+![Interfaces FortiGate](Imagenes/image2.png)
+
+---
+
+## 24.3 DHCP VLAN 10
+
+Configuración del servicio DHCP correspondiente a la VLAN 10.
+
+![DHCP VLAN 10](Imagenes/image3.png)
+
+---
+
+## 24.4 DHCP VLAN 20
+
+Configuración del servicio DHCP correspondiente a la VLAN 20.
+
+![DHCP VLAN 20](Imagenes/image4.png)
+
+---
+
+## 24.5 Web Server – Sistema de Caja
+
+Evidencia del servidor correspondiente al Sistema de Caja y de sus servicios activos.
+
+![Servidor Sistema de Caja](Imagenes/image5.png)
+
+---
+
+## 24.6 Web Server – Sistema de Inventario
+
+Evidencia del servidor correspondiente al Sistema de Inventario y de sus servicios activos.
+
+![Servidor Sistema de Inventario](Imagenes/image6.png)
+
+---
+
+## 24.7 Database Server
+
+Evidencia del servidor de base de datos y del funcionamiento del servicio MySQL.
+
+![DB Server](Imagenes/image7.png)
+
+---
+
+## 24.8 Políticas del FortiGate
+
+En esta evidencia se muestran las políticas creadas en FortiGate para controlar la comunicación entre las VLAN, la DMZ e Internet.
+
+![Políticas FortiGate](Imagenes/image8.png)
+
+---
+
+## 24.9 SSH permitido desde VLAN 20
+
+Prueba de conexión SSH desde el equipo perteneciente a VLAN 20 hacia uno de los servidores de la DMZ.
+
+Esta prueba demuestra que VLAN 20 tiene permitido administrar los servidores mediante SSH.
+
+![SSH permitido VLAN 20](Imagenes/image9.png)
+
+---
+
+## 24.10 Registro de violaciones de políticas
+
+Los registros del FortiGate muestran los intentos de comunicación bloqueados por las políticas de seguridad.
+
+Entre las pruebas realizadas se encuentran:
+
+- VLAN 10 intentando utilizar SSH hacia la DMZ.
+- VLAN 10 intentando acceder al Sistema de Inventario.
+- DMZ intentando iniciar comunicación hacia VLAN 10.
+- DMZ intentando iniciar comunicación hacia VLAN 20.
+
+Los eventos fueron registrados por FortiGate como tráfico denegado por las políticas correspondientes.
+
+![Logs de políticas](Imagenes/image10.png)
+
+---
+
+## 24.11 Actualizaciones permitidas desde la DMZ
+
+Esta evidencia muestra la política utilizada para permitir únicamente las comunicaciones necesarias desde la DMZ hacia los servicios de actualización autorizados.
+
+![Actualizaciones DMZ](Imagenes/image12.png)
+
+---
+
+## 24.12 VLAN y enlace Trunk del switch
+
+Se verificó la existencia de VLAN 10 y VLAN 20 y la configuración del enlace trunk entre el switch y el FortiGate.
+
+![VLAN y Trunk](Imagenes/image13.png)
+
+---
+
+## 24.13 Port Security
+
+Se verificó la configuración de Port Security en los puertos destinados a los usuarios.
+
+La configuración utiliza direcciones MAC sticky y el modo de violación `restrict`.
+
+![Port Security](Imagenes/image14.png)
+
+---
+
+## 24.14 Estado de las VLAN del switch
+
+La siguiente evidencia muestra las VLAN configuradas en el switch y los puertos asociados a cada una.
+
+![VLAN del Switch](Imagenes/image15.png)
+
+---
+
+# 25. Conclusión
 
 Con esta práctica se logró crear una infraestructura segmentada y aplicar diferentes controles de seguridad para proteger tanto a los usuarios como a los servidores.
 
